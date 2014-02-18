@@ -47,8 +47,14 @@ public class PacketReceiver {
                 }
             }
 
-            private void receiveFake() {
+            private double t = 0.0;
 
+            private void receiveFake() {
+                t += 3.2;
+                if (t > 1000.0) {
+                    t = 0.0;
+                }
+                deliverPackets(String.format("Foo: %f\n", (Double) Math.sin(t)));
             }
 
             private final byte[] buf = new byte[1 << 16];
@@ -72,6 +78,7 @@ public class PacketReceiver {
 
                 try {
                     socket = new DatagramSocket(cport);
+                    socket.setSoTimeout(300);
                 } catch (SocketException ex) {
                     Logger.getLogger(PacketReceiver.class.getName()).log(Level.SEVERE, null, ex);
                     socket = null;
@@ -91,21 +98,24 @@ public class PacketReceiver {
             @Override
             public void run() {
                 cport = port;
-                try {
-                    while (cport == port) {
-                        if (!init()) {
-                            while (cport == port) {
-                                Thread.sleep(100);
+                while (true) {
+                    try {
+                        while (cport == port) {
+                            if (!init()) {
+                                while (cport == port) {
+                                    Thread.sleep(100);
+                                }
+                            } else {
+                                while (cport == port) {
+                                    receive();
+                                }
+                                cleanup();
                             }
-                        } else {
-                            while (cport == port) {
-                                receive();
-                            }
-                            cleanup();
                         }
-                    }
-                } catch (InterruptedException e) {
+                    } catch (InterruptedException e) {
 
+                    }
+                    cport = port;
                 }
             }
 
@@ -118,7 +128,7 @@ public class PacketReceiver {
     }
 
     private synchronized void deliverPackets(String packet) {
-        System.out.println(packet);
+        System.out.print(packet);
     }
 
     /**
@@ -134,11 +144,20 @@ public class PacketReceiver {
         return port;
     }
 
-    public static interface PacketClient {
+    /*
+     TODO: some want floats lists, others want
+     string streams
+     */
+    public static interface FloatPacketClient {
 
         void setQueue(FloatQueue s);
 
         void newPackets(int k);
+    }
+
+    public static interface UnivPacketClient {
+
+        void newPacket(String r);
     }
 
     public synchronized void addSpecificClient(String key, PacketClient p) {
