@@ -31,16 +31,12 @@ import java.util.Iterator;
  */
 public class FloatQueue implements Iterable<float[]> {
 
-    public static final String TSV_SEPERATOR = "[ \t,;:]*";
-
     private float[][] store;
     private int tail;
-    private int width;
 
     public FloatQueue() {
         store = new float[50][];
         tail = 0;
-        width = 0;
     }
 
     /**
@@ -50,7 +46,7 @@ public class FloatQueue implements Iterable<float[]> {
      * @return
      */
     public boolean add(String s) {
-        String[] x = s.split(TSV_SEPERATOR);
+        String[] x = s.split(",");
         float[] values = new float[x.length];
 
         for (int j = 0; j < x.length; j++) {
@@ -61,6 +57,8 @@ public class FloatQueue implements Iterable<float[]> {
             }
         }
 
+        store[tail] = values;
+
         tail++;
         if (tail == store.length) {
             float[][] t = store;
@@ -68,16 +66,7 @@ public class FloatQueue implements Iterable<float[]> {
             System.arraycopy(t, 0, store, 0, tail);
         }
 
-        store[tail] = values;
-        if (values.length > width) {
-            width = values.length;
-        }
-
         return true;
-    }
-
-    public int width() {
-        return width;
     }
 
     private static class FloatIterator implements Iterator<float[]> {
@@ -113,4 +102,7 @@ public class FloatQueue implements Iterable<float[]> {
         return new FloatIterator(this);
     }
 
+    public int size() {
+        return tail;
+    }
 }

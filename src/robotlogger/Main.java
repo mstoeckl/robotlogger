@@ -7,10 +7,15 @@ package robotlogger;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import javax.swing.JFormattedTextField;
 import javax.swing.JFrame;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.text.DefaultFormatter;
 
 /**
  *
@@ -19,19 +24,32 @@ import javax.swing.event.ChangeListener;
 public class Main extends JFrame {
 
     private final PacketReceiver rec;
+    private int lineLimit;
 
     public Main() {
         initComponents();
 
         final int startport = 1140;
+        final int maxlines = 2000;
 
         rec = new PacketReceiver(startport);
+        lineLimit = maxlines;
 
         portSpinner.setModel(new SpinnerNumberModel(startport, 1, 65535, 1));
+        ((DefaultFormatter) ((JFormattedTextField) portSpinner.getEditor()
+                .getComponent(0)).getFormatter()).setCommitsOnValidEdit(true);
         portSpinner.addChangeListener(new ChangeListener() {
             @Override
             public void stateChanged(ChangeEvent e) {
                 updateReceiver();
+            }
+        });
+
+        cutoffSpinner.setModel(new SpinnerNumberModel(maxlines, 500, 30000, 500));
+        cutoffSpinner.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                lineLimit = (Integer) cutoffSpinner.getValue();
             }
         });
 
@@ -42,15 +60,37 @@ public class Main extends JFrame {
             }
         });
 
-        rec.addUniversalClient(new PacketReceiver.PacketClient() {
+        rec.addUniversalClient(new PacketReceiver.UnivPacketClient() {
             @Override
-            public void setQueue(FloatQueue s) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            public void newPacket(final String r) {
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        addToStreamArea(r);
+                    }
+                });
             }
+        });
 
+        StreamTableModel n = new StreamTableModel();
+        streamTable.setModel(n);
+        rec.addUniversalClient(n);
+
+        graphButton.addActionListener(new ActionListener() {
             @Override
-            public void newPackets(int k) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            public void actionPerformed(ActionEvent e) {
+                for (int j : streamTable.getSelectedRows()) {
+                    launchGraph((String) streamTable.getValueAt(j, 0));
+                }
+            }
+        });
+
+        streamButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                for (int j : streamTable.getSelectedRows()) {
+                    launchTextStream((String) streamTable.getValueAt(j, 0));
+                }
             }
         });
 
@@ -78,6 +118,31 @@ public class Main extends JFrame {
         rec.setPort(port);
     }
 
+    private void addToStreamArea(String r) {
+        streamArea.append(r + "\n");
+        if (streamArea.getLineCount() > lineLimit) {
+            streamArea.setText("");
+        }
+    }
+
+    private void launchGraph(final String key) {
+        System.out.format("Launching graph for |%s|\n", key);
+        final Graph g = new Graph();
+        rec.addSpecificClient(key, g);
+        g.setVisible(true);
+        g.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                rec.removeSpecificClient(key, g);
+            }
+        });
+        // TODO: disconnect graph on death
+    }
+
+    private void launchTextStream(String key) {
+        System.out.format("Launching stream for |%s|\n", key);
+    }
+
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -103,7 +168,7 @@ public class Main extends JFrame {
         filler6 = new javax.swing.Box.Filler(new java.awt.Dimension(0, 0), new java.awt.Dimension(0, 0), new java.awt.Dimension(32767, 32767));
         streamPanel = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
-        jTextArea1 = new javax.swing.JTextArea();
+        streamArea = new javax.swing.JTextArea();
         tablePanel = new javax.swing.JPanel();
         jScrollPane2 = new javax.swing.JScrollPane();
         streamTable = new javax.swing.JTable();
@@ -151,9 +216,10 @@ public class Main extends JFrame {
 
         streamPanel.setLayout(new java.awt.BorderLayout());
 
-        jTextArea1.setColumns(20);
-        jTextArea1.setRows(5);
-        jScrollPane1.setViewportView(jTextArea1);
+        streamArea.setEditable(false);
+        streamArea.setColumns(20);
+        streamArea.setRows(5);
+        jScrollPane1.setViewportView(streamArea);
 
         streamPanel.add(jScrollPane1, java.awt.BorderLayout.CENTER);
 
@@ -228,9 +294,9 @@ public class Main extends JFrame {
     private javax.swing.JSpinner jSpinner1;
     private javax.swing.JSpinner jSpinner2;
     private javax.swing.JTabbedPane jTabbedPane1;
-    private javax.swing.JTextArea jTextArea1;
     private javax.swing.JComboBox modeCombo;
     private javax.swing.JSpinner portSpinner;
+    private javax.swing.JTextArea streamArea;
     private javax.swing.JButton streamButton;
     private javax.swing.JPanel streamPanel;
     private javax.swing.JTable streamTable;

@@ -10,11 +10,11 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -24,16 +24,32 @@ import java.util.logging.Logger;
  */
 public class PacketReceiver {
 
-    private volatile Set<PacketClient> univclients;
-    private volatile Map<String, List<PacketClient>> specclients;
+    /*
+     TODO: some want float lists, others want
+     string streams
+     */
+    public static interface SpecPacketClient {
+
+        void setQueue(FloatQueue s);
+
+        void newPackets(int k);
+    }
+
+    public static interface UnivPacketClient {
+
+        void newPacket(String r);
+    }
+
+    private volatile Set<UnivPacketClient> univclients;
+    private volatile Map<String, List<SpecPacketClient>> specclients;
     private int port;
     private final Thread feed;
     private volatile Map<String, FloatQueue> map;
 
     PacketReceiver(int default_port) {
-        univclients = new TreeSet<>();
-        specclients = new TreeMap<>();
-        map = new TreeMap<>();
+        univclients = new HashSet<>();
+        specclients = new HashMap<>();
+        map = new HashMap<>();
         this.port = default_port;
         feed = new Thread(new Runnable() {
             int cport;
@@ -54,6 +70,12 @@ public class PacketReceiver {
                 if (t > 1000.0) {
                     t = 0.0;
                 }
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PacketReceiver.class.getName()).log(Level.SEVERE, null, ex);
+                }
+
                 deliverPackets(String.format("Foo: %f\n", (Double) Math.sin(t)));
             }
 
@@ -68,7 +90,8 @@ public class PacketReceiver {
                     return;
                 }
 
-                deliverPackets(new String(p.getData(), 0, p.getLength()));
+                String o = new String(p.getData(), 0, p.getLength());
+                deliverPackets(o);
             }
 
             private boolean init() {
@@ -127,10 +150,6 @@ public class PacketReceiver {
         feed.start();
     }
 
-    private synchronized void deliverPackets(String packet) {
-        System.out.print(packet);
-    }
-
     /**
      * port = -1 signifies fake
      *
@@ -144,46 +163,81 @@ public class PacketReceiver {
         return port;
     }
 
-    /*
-     TODO: some want floats lists, others want
-     string streams
-     */
-    public static interface FloatPacketClient {
-
-        void setQueue(FloatQueue s);
-
-        void newPackets(int k);
+    public static String packetKey(String p) {
+        int isp = p.indexOf(":");
+        return p.substring(0, isp);
     }
 
-    public static interface UnivPacketClient {
-
-        void newPacket(String r);
+    public static String packetValue(String p) {
+        int isp = p.indexOf(":");
+        return p.substring(isp + 1);
     }
 
-    public synchronized void addSpecificClient(String key, PacketClient p) {
+    private synchronized void deliverPackets(String packet) {
+        if (packet.endsWith("\n")) {
+            packet = packet.substring(0, packet.length() - 1);
+        }
 
-        List<PacketClient> e = specclients.get(key);
+        for (UnivPacketClient r : univclients) {
+            r.newPacket(packet);
+        }
+
+        String key = packetKey(packet);
+        String val = packetValue(packet);
+
+        List<SpecPacketClient> r = specclients.get(key);
+        if (r == null) {
+            r = new ArrayList<>();
+            specclients.put(key, r);
+        }
+
+        FloatQueue f = map.get(key);
+        if (f == null) {
+            f = new FloatQueue();
+            map.put(key, f);
+            for (SpecPacketClient j : r) {
+                j.setQueue(f);
+            }
+        }
+        if (!f.add(val)) {
+            // write failed
+            return;
+        }
+
+        for (SpecPacketClient j : r) {
+            j.newPackets(1);
+        }
+    }
+
+    public synchronized void addSpecificClient(String key, SpecPacketClient p) {
+
+        List<SpecPacketClient> e = specclients.get(key);
         if (e == null) {
-            List<PacketClient> k = new ArrayList<>(1);
+            List<SpecPacketClient> k = new ArrayList<>(1);
             k.add(p);
             specclients.put(key, k);
         } else {
             e.add(p);
         }
+        // hook in stream if it exists
+        FloatQueue f = map.get(key);
+        if (f != null) {
+            p.setQueue(f);
+        }
     }
 
-    public synchronized void removeSpecificClient(String key, PacketClient p) {
-        List<PacketClient> e = specclients.get(key);
+    public synchronized void removeSpecificClient(String key, SpecPacketClient p) {
+        List<SpecPacketClient> e = specclients.get(key);
         if (e != null) {
             e.remove(p);
         }
     }
 
-    public synchronized void addUniversalClient(PacketClient p) {
+    public synchronized void addUniversalClient(UnivPacketClient p) {
         univclients.add(p);
     }
 
-    public synchronized void removeUniversalClient(PacketClient p) {
+    public synchronized void removeUniversalClient(UnivPacketClient p) {
         univclients.remove(p);
     }
 
