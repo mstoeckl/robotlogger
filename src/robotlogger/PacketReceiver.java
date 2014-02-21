@@ -28,9 +28,16 @@ public class PacketReceiver {
      TODO: some want float lists, others want
      string streams
      */
-    public static interface SpecPacketClient {
+    public static interface FloatPacketClient {
 
         void setQueue(FloatQueue s);
+
+        void newPackets(int k);
+    }
+
+    public static interface StringPacketClient {
+
+        void setQueue(List<String> s);
 
         void newPackets(int k);
     }
@@ -40,109 +47,122 @@ public class PacketReceiver {
         void newPacket(String r);
     }
 
-    private volatile Set<UnivPacketClient> univclients;
-    private volatile Map<String, List<SpecPacketClient>> specclients;
+    private volatile Set<UnivPacketClient> uclients;
+    private volatile Map<String, List<FloatPacketClient>> fclients;
+    private volatile Map<String, List<StringPacketClient>> sclients;
+
     private int port;
     private final Thread feed;
-    private volatile Map<String, FloatQueue> map;
+    private volatile Map<String, FloatQueue> fmap;
+    private volatile Map<String, List<String>> smap;
 
-    PacketReceiver(int default_port) {
-        univclients = new HashSet<>();
-        specclients = new HashMap<>();
-        map = new HashMap<>();
-        this.port = default_port;
-        feed = new Thread(new Runnable() {
-            int cport;
-            DatagramSocket socket;
+    private static class UDPPuller implements Runnable {
 
-            private void receive() {
-                if (cport == -1) {
-                    receiveFake();
-                } else {
-                    receiveReal();
-                }
+        public UDPPuller(PacketReceiver r) {
+            rec = r;
+        }
+
+        int cport;
+        DatagramSocket socket;
+        PacketReceiver rec;
+
+        private void receive() {
+            if (cport == -1) {
+                receiveFake();
+            } else {
+                receiveReal();
+            }
+        }
+
+        private double t = 0.0;
+
+        private void receiveFake() {
+            t += 3.2;
+            if (t > 1000.0) {
+                t = 0.0;
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException ex) {
+                Logger.getLogger(PacketReceiver.class.getName()).log(Level.SEVERE, null, ex);
             }
 
-            private double t = 0.0;
+            rec.deliverPackets(String.format("Foo: %f\n", (Double) Math.sin(t)));
+        }
 
-            private void receiveFake() {
-                t += 3.2;
-                if (t > 1000.0) {
-                    t = 0.0;
-                }
-                try {
-                    Thread.sleep(5);
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PacketReceiver.class.getName()).log(Level.SEVERE, null, ex);
-                }
+        private final byte[] buf = new byte[1 << 16];
 
-                deliverPackets(String.format("Foo: %f\n", (Double) Math.sin(t)));
+        private void receiveReal() {
+            DatagramPacket p = new DatagramPacket(buf, buf.length);
+
+            try {
+                socket.receive(p);
+            } catch (IOException e) {
+                return;
             }
 
-            private final byte[] buf = new byte[1 << 16];
+            String o = new String(p.getData(), 0, p.getLength());
+            rec.deliverPackets(o);
+        }
 
-            private void receiveReal() {
-                DatagramPacket p = new DatagramPacket(buf, buf.length);
-
-                try {
-                    socket.receive(p);
-                } catch (IOException e) {
-                    return;
-                }
-
-                String o = new String(p.getData(), 0, p.getLength());
-                deliverPackets(o);
-            }
-
-            private boolean init() {
-                if (cport == -1) {
-                    return true;
-                }
-
-                try {
-                    socket = new DatagramSocket(cport);
-                    socket.setSoTimeout(300);
-                } catch (SocketException ex) {
-                    Logger.getLogger(PacketReceiver.class.getName()).log(Level.SEVERE, null, ex);
-                    socket = null;
-                    return false;
-                }
+        private boolean init() {
+            if (cport == -1) {
                 return true;
             }
 
-            private void cleanup() {
-                if (port == -1) {
-                    return;
-                }
+            try {
+                socket = new DatagramSocket(cport);
+                socket.setSoTimeout(300);
+            } catch (SocketException ex) {
+                Logger.getLogger(PacketReceiver.class.getName()).log(Level.SEVERE, null, ex);
+                socket = null;
+                return false;
+            }
+            return true;
+        }
 
-                socket.close();
+        private void cleanup() {
+            if (cport == -1) {
+                return;
             }
 
-            @Override
-            public void run() {
-                cport = port;
-                while (true) {
-                    try {
-                        while (cport == port) {
-                            if (!init()) {
-                                while (cport == port) {
-                                    Thread.sleep(100);
-                                }
-                            } else {
-                                while (cport == port) {
-                                    receive();
-                                }
-                                cleanup();
+            socket.close();
+        }
+
+        @Override
+        public void run() {
+            cport = rec.getPort();
+            while (true) {
+                try {
+                    while (cport == rec.getPort()) {
+                        if (!init()) {
+                            while (cport == rec.getPort()) {
+                                Thread.sleep(100);
                             }
+                        } else {
+                            while (cport == rec.getPort()) {
+                                receive();
+                            }
+                            cleanup();
                         }
-                    } catch (InterruptedException e) {
-
                     }
-                    cport = port;
-                }
-            }
+                } catch (InterruptedException e) {
 
-        });
+                }
+                cport = rec.getPort();
+            }
+        }
+    }
+
+    PacketReceiver(int default_port) {
+        uclients = new HashSet<>();
+        fclients = new HashMap<>();
+        sclients = new HashMap<>();
+        fmap = new HashMap<>();
+        smap = new HashMap<>();
+
+        this.port = default_port;
+        feed = new Thread(new UDPPuller(this));
         feed.setDaemon(true);
     }
 
@@ -178,24 +198,28 @@ public class PacketReceiver {
             packet = packet.substring(0, packet.length() - 1);
         }
 
-        for (UnivPacketClient r : univclients) {
+        for (UnivPacketClient r : uclients) {
             r.newPacket(packet);
         }
 
         String key = packetKey(packet);
         String val = packetValue(packet);
+        deliverFloat(key, val);
+        deliverString(key, val);
+    }
 
-        List<SpecPacketClient> r = specclients.get(key);
+    private void deliverString(String key, String val) {
+        List<StringPacketClient> r = sclients.get(key);
         if (r == null) {
             r = new ArrayList<>();
-            specclients.put(key, r);
+            sclients.put(key, r);
         }
 
-        FloatQueue f = map.get(key);
+        List<String> f = smap.get(key);
         if (f == null) {
-            f = new FloatQueue();
-            map.put(key, f);
-            for (SpecPacketClient j : r) {
+            f = new ArrayList<>();
+            smap.put(key, f);
+            for (StringPacketClient j : r) {
                 j.setQueue(f);
             }
         }
@@ -204,44 +228,93 @@ public class PacketReceiver {
             return;
         }
 
-        for (SpecPacketClient j : r) {
+        for (StringPacketClient j : r) {
             j.newPackets(1);
         }
     }
 
-    public synchronized void addSpecificClient(String key, SpecPacketClient p) {
+    private void deliverFloat(String key, String val) {
+        List<FloatPacketClient> r = fclients.get(key);
+        if (r == null) {
+            r = new ArrayList<>();
+            fclients.put(key, r);
+        }
 
-        List<SpecPacketClient> e = specclients.get(key);
+        FloatQueue f = fmap.get(key);
+        if (f == null) {
+            f = new FloatQueue();
+            fmap.put(key, f);
+            for (FloatPacketClient j : r) {
+                j.setQueue(f);
+            }
+        }
+        if (!f.add(val)) {
+            // write failed
+            return;
+        }
+
+        for (FloatPacketClient j : r) {
+            j.newPackets(1);
+        }
+    }
+
+    public synchronized void addSpecificClient(String key, FloatPacketClient p) {
+
+        List<FloatPacketClient> e = fclients.get(key);
         if (e == null) {
-            List<SpecPacketClient> k = new ArrayList<>(1);
+            List<FloatPacketClient> k = new ArrayList<>(1);
             k.add(p);
-            specclients.put(key, k);
+            fclients.put(key, k);
         } else {
             e.add(p);
         }
         // hook in stream if it exists
-        FloatQueue f = map.get(key);
+        FloatQueue f = fmap.get(key);
         if (f != null) {
             p.setQueue(f);
         }
     }
 
-    public synchronized void removeSpecificClient(String key, SpecPacketClient p) {
-        List<SpecPacketClient> e = specclients.get(key);
+    public synchronized void removeSpecificClient(String key, FloatPacketClient p) {
+        List<FloatPacketClient> e = fclients.get(key);
+        if (e != null) {
+            e.remove(p);
+        }
+    }
+
+    public synchronized void addSpecificClient(String key, StringPacketClient p) {
+
+        List<StringPacketClient> e = sclients.get(key);
+        if (e == null) {
+            List<StringPacketClient> k = new ArrayList<>(1);
+            k.add(p);
+            sclients.put(key, k);
+        } else {
+            e.add(p);
+        }
+        // hook in stream if it exists
+        List<String> f = smap.get(key);
+        if (f != null) {
+            p.setQueue(f);
+        }
+    }
+
+    public synchronized void removeSpecificClient(String key, StringPacketClient p) {
+        List<StringPacketClient> e = sclients.get(key);
         if (e != null) {
             e.remove(p);
         }
     }
 
     public synchronized void addUniversalClient(UnivPacketClient p) {
-        univclients.add(p);
+        uclients.add(p);
     }
 
     public synchronized void removeUniversalClient(UnivPacketClient p) {
-        univclients.remove(p);
+        uclients.remove(p);
     }
 
     public synchronized Map<String, FloatQueue> getAvailable() {
-        return map;
+        return fmap;
     }
 }

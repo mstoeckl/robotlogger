@@ -25,7 +25,7 @@ import javax.swing.text.DefaultFormatter;
  *
  * @author Robotics
  */
-public class Graph extends JFrame implements PacketReceiver.SpecPacketClient {
+public class Graph extends JFrame implements PacketReceiver.FloatPacketClient {
 
     private final JPanel substrate;
     private FloatQueue queue;
@@ -119,7 +119,6 @@ public class Graph extends JFrame implements PacketReceiver.SpecPacketClient {
         int height = substrate.getHeight();
         substrate.setPreferredSize(new Dimension(width, height));
 
-        jScrollPane1.setSize(jScrollPane1.getSize());
         scheduleRepaint();
     }
 

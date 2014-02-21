@@ -136,11 +136,19 @@ public class Main extends JFrame {
                 rec.removeSpecificClient(key, g);
             }
         });
-        // TODO: disconnect graph on death
     }
 
-    private void launchTextStream(String key) {
+    private void launchTextStream(final String key) {
         System.out.format("Launching stream for |%s|\n", key);
+        final StringStream s = new StringStream();
+        rec.addSpecificClient(key, s);
+        s.setVisible(true);
+        s.addWindowFocusListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                rec.removeSpecificClient(key, s);
+            }
+        });
     }
 
     /**
