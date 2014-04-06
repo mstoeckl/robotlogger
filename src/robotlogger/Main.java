@@ -25,6 +25,7 @@ public class Main extends JFrame {
 
     private final PacketReceiver rec;
     private int lineLimit;
+    private double rpm;
 
     public Main() {
         initComponents();
@@ -32,7 +33,8 @@ public class Main extends JFrame {
         final int startport = 1140;
         final int maxlines = 2000;
 
-        rec = new PacketReceiver(startport);
+        rpm = 100;
+        rec = new PacketReceiver(startport, rpm);
         lineLimit = maxlines;
 
         portSpinner.setModel(new SpinnerNumberModel(startport, 1, 65535, 1));
@@ -50,6 +52,15 @@ public class Main extends JFrame {
             @Override
             public void stateChanged(ChangeEvent e) {
                 lineLimit = (Integer) cutoffSpinner.getValue();
+            }
+        });
+
+        fakeRPM.setModel(new SpinnerNumberModel(rpm, 0.1, 10000.0, 50.0));
+        fakeRPM.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                rpm = (Double) fakeRPM.getValue();
+                rec.setRPM(rpm);
             }
         });
 
@@ -165,7 +176,7 @@ public class Main extends JFrame {
         jLabel1 = new javax.swing.JLabel();
         jSpinner1 = new javax.swing.JSpinner();
         jLabel2 = new javax.swing.JLabel();
-        jSpinner2 = new javax.swing.JSpinner();
+        fakeRPM = new javax.swing.JSpinner();
         jLabel3 = new javax.swing.JLabel();
         cutoffSpinner = new javax.swing.JSpinner();
         jLabel4 = new javax.swing.JLabel();
@@ -197,9 +208,11 @@ public class Main extends JFrame {
         confPanel.add(jSpinner1);
 
         jLabel2.setHorizontalAlignment(javax.swing.SwingConstants.TRAILING);
-        jLabel2.setText("Mystery");
+        jLabel2.setText("Fake RPM");
         confPanel.add(jLabel2);
-        confPanel.add(jSpinner2);
+
+        fakeRPM.setModel(new javax.swing.SpinnerNumberModel(100.0d, 0.1d, 10000.0d, 50.0d));
+        confPanel.add(fakeRPM);
 
         jLabel3.setHorizontalAlignment(javax.swing.SwingConstants.TRAILING);
         jLabel3.setText("Textbox Cutoff");
@@ -285,6 +298,7 @@ public class Main extends JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JPanel confPanel;
     private javax.swing.JSpinner cutoffSpinner;
+    private javax.swing.JSpinner fakeRPM;
     private javax.swing.Box.Filler filler1;
     private javax.swing.Box.Filler filler2;
     private javax.swing.Box.Filler filler3;
@@ -300,7 +314,6 @@ public class Main extends JFrame {
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JSpinner jSpinner1;
-    private javax.swing.JSpinner jSpinner2;
     private javax.swing.JTabbedPane jTabbedPane1;
     private javax.swing.JComboBox modeCombo;
     private javax.swing.JSpinner portSpinner;

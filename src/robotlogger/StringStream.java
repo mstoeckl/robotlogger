@@ -10,6 +10,10 @@ import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Document;
+import javax.swing.text.GapContent;
+import javax.swing.text.PlainDocument;
 
 /**
  *
@@ -20,6 +24,7 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
     private List<String> queue;
     private volatile boolean ignore;
     private volatile int maxlen;
+    private volatile int last_index;
 
     /**
      * Creates new form StringStream
@@ -39,14 +44,41 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
             @Override
             public void stateChanged(ChangeEvent e) {
                 maxlen = (Integer) spinMaxLines.getValue();
-                if (jTextArea1.getLineCount() > maxlen) {
-                    jTextArea1.setText("");
-                }
+                reload();
             }
         });
 
+        jTextArea1.setDocument(new PlainDocument(new GapContent()));
+
         ignore = false;
         maxlen = (Integer) spinMaxLines.getValue();
+        last_index = 0;
+    }
+
+    private void reload() {
+        Document g = jTextArea1.getDocument();
+
+        // add on the latest stuff to the bottom
+        int l = queue.size();
+        while (last_index < l) {
+            jTextArea1.append(queue.get(last_index) + "\n");
+            last_index++;
+        }
+
+        // remove any extra length from the top
+        int r = jTextArea1.getLineCount() - 1;
+        while (r > maxlen) {
+            String s = queue.get(queue.size() - r);
+            try {
+                g.remove(0, s.length() + 1);
+            } catch (BadLocationException ex) {
+                ex.printStackTrace(System.err);
+                System.exit(1);
+                break;
+            }
+            r--;
+        }
+
     }
 
     /**
@@ -86,7 +118,7 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
         jLabel1.setText("Max Lines");
         jPanel2.add(jLabel1);
 
-        spinMaxLines.setModel(new javax.swing.SpinnerNumberModel(2000, 500, 100000, 500));
+        spinMaxLines.setModel(new javax.swing.SpinnerNumberModel(Integer.valueOf(500), Integer.valueOf(500), null, Integer.valueOf(500)));
         jPanel2.add(spinMaxLines);
 
         jToggleButton1.setText("Ignore");
@@ -112,19 +144,19 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
         queue = s;
     }
 
+    private List<String> getQueue() {
+        return queue;
+    }
+
     @Override
     public void newPackets(int k) {
         if (ignore) {
             return;
         }
-        final String next = queue.get(queue.size() - 1);
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
-                jTextArea1.append(next + "\n");
-                if (jTextArea1.getLineCount() > maxlen) {
-                    jTextArea1.setText("");
-                }
+                reload();
             }
         });
     }
