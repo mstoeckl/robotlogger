@@ -340,7 +340,7 @@ public class Graph extends JFrame implements PacketReceiver.FloatPacketClient {
         jLabel4.setText("Graph Width");
         jPanel2.add(jLabel4);
 
-        spinHLength.setModel(new javax.swing.SpinnerNumberModel(Integer.valueOf(1000), null, null, Integer.valueOf(10)));
+        spinHLength.setModel(new javax.swing.SpinnerNumberModel(Integer.valueOf(200), null, null, Integer.valueOf(10)));
         jPanel2.add(spinHLength);
 
         ignoreButton.setText("Ignore");

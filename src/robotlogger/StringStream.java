@@ -26,6 +26,8 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
     private volatile int maxlen;
     private volatile int last_index;
 
+    private volatile boolean scheduled_reload;
+
     /**
      * Creates new form StringStream
      */
@@ -44,7 +46,7 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
             @Override
             public void stateChanged(ChangeEvent e) {
                 maxlen = (Integer) spinMaxLines.getValue();
-                reload();
+                scheduleReload();
             }
         });
 
@@ -53,9 +55,24 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
         ignore = false;
         maxlen = (Integer) spinMaxLines.getValue();
         last_index = 0;
+
+        scheduled_reload = false;
+    }
+
+    private void scheduleReload() {
+        if (!scheduled_reload) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    reload();
+                }
+            });
+        }
     }
 
     private void reload() {
+        scheduled_reload = false;
+
         Document g = jTextArea1.getDocument();
 
         // add on the latest stuff to the bottom
@@ -143,20 +160,11 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
         queue = s;
     }
 
-    private List<String> getQueue() {
-        return queue;
-    }
-
     @Override
     public void newPackets(int k) {
         if (ignore) {
             return;
         }
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                reload();
-            }
-        });
+        scheduleReload();
     }
 }
