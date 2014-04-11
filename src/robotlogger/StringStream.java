@@ -82,8 +82,21 @@ public class StringStream extends JFrame implements PacketReceiver.StringPacketC
             last_index++;
         }
 
-        // remove any extra length from the top
         int r = jTextArea1.getLineCount() - 1;
+        // add extra to top if available
+        while (r < maxlen && r < l) {
+            String s = queue.get(queue.size() - r);
+            try {
+                g.insertString(0, s + "\n", null);
+            } catch (BadLocationException ex) {
+                ex.printStackTrace(System.err);
+                System.exit(1);
+                break;
+            }
+            r++;
+        }
+
+        // remove any extra length from the top
         while (r > maxlen) {
             String s = queue.get(queue.size() - r);
             try {
